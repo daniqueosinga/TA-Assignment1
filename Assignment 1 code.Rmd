@@ -115,11 +115,43 @@ for (j in 1:nrow(reviews)) {
 # Remove empty reviews
 reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
 
+
+#reviews is reviews_df in lecture 2 code
+
 ```
 
 Stage 2
 MDS
 
+```{r}
+# MDS
+
+reviews_corp <- corpus(reviews, docid_field = "ID", text_field = "text")
+co_occurrence_matrix <- fcm(x = reviews_corp, context = "document", count = "frequency", tri=FALSE)
+# Moeten we "context = document gebruiken of context = window?"
+# Moeten we count = frequency of count = boolean gebruiken?
+
+reviews_dfm <- dfm(reviews_corp) # get document frequency matrix
+counts <- colSums(as.matrix(reviews_dfm)) 
+co_occurrence_matrix <- as.matrix(co_occurrence_matrix)
+diag(co_occurrence_matrix) <- counts
+
+sortedcount <- counts%>% sort(decreasing=TRUE)
+sortednames <- names(sortedcount)
+nwords<-200
+subset_words<-as.matrix(sortedcount[1:nwords])
+co_occurrence_matrix <- co_occurrence_matrix[sortednames[1:nwords],sortednames[1:nwords]]
+co_occurrence_matrix[1:15,1:15]
+distances <- sim2diss(co_occurrence_matrix, method = "cooccurrence") # Transform similarities to distances.
+distances[1:15,1:15]
+
+
+MDS_map <- smacofSym(distances) # run the routine that finds the best matching coordinates in a 2D mp given the distances
+ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf))) +
+     geom_text(check_overlap = TRUE) + theme_minimal(base_size = 15) + xlab('') + ylab('') +
+     scale_y_continuous(breaks = NULL) + scale_x_continuous(breaks = NULL)
+# the conf element in the MDS output contains the coordinatis with as names D1 and D2.
+```
 
 
 
