@@ -153,7 +153,49 @@ ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf)))
 # the conf element in the MDS output contains the coordinatis with as names D1 and D2.
 ```
 
+PCA
+```{r}
+review_tdm <- reviews %>% unnest_tokens(word,text) %>% count(word,ID,sort=TRUE) %>%ungroup()%>%cast_tdm(word,ID,n)
+
+counts <- rowSums(as.matrix(review_tdm)) 
+sortedcount <- counts%>% sort(decreasing=TRUE)
+nwords<-200
+sortednames <- names(sortedcount[1:nwords])
+
+pca_results <- prcomp(t(review_tdm[,1:10000]), scale = FALSE, rank. = 50) # why do we set scale to FALSE? -> All data is measured on the same scale 
+pca_results_backup <- pca_results  # create a backup of results for later use
+```
+```{r}
+fviz_screeplot(pca_results,ncp=30)
+ncomp<-5
+
+# Hoe kies je ncomp?
+```
+
+```{r}
+j<-1
+toplist <- abs(pca_results$rotation[,j]) %>% sort(decreasing=TRUE) %>% head(10)
+topwords <- (names(toplist))
+for (j in 2:ncomp){
+toplist <- abs(pca_results$rotation[,j]) %>% sort(decreasing=TRUE) %>% head(10)
+topwords <-cbind( topwords , (names(toplist)))
+  }
+
+topwords
+
+```
+
+```{r}
+#PCA plot
+axeslist <- c(1, 2)
+fviz_pca_var(pca_results, axes=axeslist 
+             ,geom.var = c("arrow", "text")
+              ,col.var = "contrib", # Color by contributions to the PC
+              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+              repel = TRUE     # Avoid text overlapping
+             )
 
 
+```
 
 
