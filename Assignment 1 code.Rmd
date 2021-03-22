@@ -97,18 +97,31 @@ reviews_vector <- reviews %>% unnest_tokens(word,text, to_lower=TRUE)
 #remove very frequent and infrequent words
 counts <- reviews_vector %>% count(word, sort=TRUE)
 infrequent <- counts %>% filter(n <0.00005 * nrow(reviews_vector))
-frequent <- counts[1:200,] #remove words ski and "c"
+frequent <- counts[1:1,] #remove words ski and "c"
 toremove <- full_join(frequent,infrequent)
 reviews_vector_cleaned <- reviews_vector %>% anti_join(toremove)
 
 j<-1 
+# Creating the full review from the cleaned and stemmed words
 for (j in 1:nrow(reviews)) {
- stemmed_Review<-  anti_join((reviews[j,] %>% unnest_tokens(word,Review,to_lower=TRUE)),
+ stemmed_Review<-  anti_join((reviews[j,] %>% unnest_tokens(word,text,to_lower=TRUE)),
                              toremove)
   
- reviews[j,"Review"]<- paste((stemmed_Review[,"word"]),collapse = " ")
+ reviews[j,"text"]<- paste((stemmed_Review[,"word"]),collapse = " ")
 
 }
-save(reviews, file="partially_cleaned_reviews.Rdata") 
+#save(reviews, file="partially_cleaned_reviews.Rdata") 
+
+# Remove empty reviews
+reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
+
 ```
+
+Stage 2
+MDS
+
+
+
+
+
 
