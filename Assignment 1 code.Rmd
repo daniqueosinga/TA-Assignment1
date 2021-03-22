@@ -38,7 +38,8 @@ library(readr)
 # Loading data files
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
-text.df <- read_csv("OnTheSnow_SkiAreaReviews.csv")
+text.df <- read.csv("OnTheSnow_SkiAreaReviews.csv", comment.char="#")
+
 reviews <- data.frame(ID=seq(1:nrow(text.df)),
                       text=text.df$Review.Text, 
                       stars=text.df$Review.Star.Rating..out.of.5.) 
