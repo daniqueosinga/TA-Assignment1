@@ -44,16 +44,6 @@ reviews <- data.frame(ID=seq(1:nrow(text.df)),
                       text=text.df$Review.Text, 
                       stars=text.df$Review.Star.Rating..out.of.5.) 
 
-# Return NA instead of tolower error
-tryTolower <- function(x){
-  # return NA when there is an error
-  y = NA
-  # tryCatch error
-  try_error = tryCatch(tolower(x), error = function(e) e) # if not an error
-  if (!inherits(try_error, 'error'))
-    y = tolower(x)
-  return(y) 
-}
 ```
 
 ## Stage one
@@ -107,9 +97,9 @@ reviews_vector <- reviews %>% unnest_tokens(word,text, to_lower=TRUE)
 #remove very frequent and infrequent words
 counts <- reviews_vector %>% count(word, sort=TRUE)
 infrequent <- counts %>% filter(n <0.00005 * nrow(reviews_vector))
-frequent <- counts[1:2,] #remove words ski and "c"
+frequent <- counts[1:200,] #remove words ski and "c"
 toremove <- full_join(frequent,infrequent)
-reviews_vector_cleaned <- reviews_vector %>% anti_join(toremove
+reviews_vector_cleaned <- reviews_vector %>% anti_join(toremove)
 
 j<-1 
 for (j in 1:nrow(reviews)) {
