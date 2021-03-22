@@ -1,0 +1,123 @@
+---
+title: "Assignment 1 ski data"
+author: "Larissa, Ralph, Danique en Jelle"
+date: "3/22/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Set options
+options(stringsAsFactors=F)
+Sys.setlocale('LC_ALL','C')
+
+# Loading libraries
+library(stringi)
+library(stringr)
+library(qdap)
+library(lubridate)
+library(tm)
+library(ggplot2)
+library(wordcloud)
+library(jsonlite)
+library(dplyr)
+library(tokenizers)
+library(tidytext)
+library(SnowballC)
+library(corpus)
+library(plotrix)
+library(mgsub)
+library(syuzhet)
+library(ggrepel)
+library(quanteda)
+library(smacof)
+library(factoextra)
+library(readr)
+
+# Loading data files
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
+text.df <- read_csv("data/OnTheSnow_SkiAreaReviews.csv")
+reviews <- data.frame(ID=seq(1:nrow(text.df)),
+                      text=text.df$Review.Text, 
+                      stars=text.df$Review.Star.Rating..out.of.5.) 
+
+# Return NA instead of tolower error
+tryTolower <- function(x){
+  # return NA when there is an error
+  y = NA
+  # tryCatch error
+  try_error = tryCatch(tolower(x), error = function(e) e) # if not an error
+  if (!inherits(try_error, 'error'))
+    y = tolower(x)
+  return(y) 
+}
+```
+
+## Stage one
+
+Cleaning of the data, removing punctuation and if needed, stemming. Data must be stored in 2 versions:
+- Version 1: The dataset without stemming and including punctuation (needed for stage three)
+- Version 2: The dataset as a complete fully cleaned word vector representation.
+
+
+```{r}
+#Create backup for stage 3 (including punctuation): 
+reviews_backup <- reviews 
+
+#First stage of cleaning
+reviews$text <- as.character(reviews$text)  %>% 
+  tolower() %>% 
+  {gsub(":( |-|o)*\\("," SADSMILE ", .)} %>%       # Find :( or :-( or : ( or :o(
+  {gsub(":( |-|o)*\\)"," HAPPYSMILE ", .)} %>%     # Find :) or :-) or : ) or :o)
+  {gsub("(\"| |\\$)-+\\.-+"," NUMBER", .)} %>%     # Find numbers
+  {gsub("([0-9]+:)*[0-9]+ *am"," TIME_AM", .)} %>%         # Find time AM
+  {gsub("([0-9]+:)*[0-9]+ *pm"," TIME_PM", .)} %>%         # Find time PM
+  {gsub("-+:-+","TIME", .)} %>%                    # Find general time
+  {gsub("\\$ ?[0-9]*[\\.,]*[0-9]+"," DOLLARVALUE ", .)} %>%           # Find Dollar values
+  {gsub("[0-9]*[\\.,]*[0-9]+"," NUMBER ", .)} %>%           # Find remaining numbers
+  {gsub("-"," ", .)} %>%                           # Remove all -
+  {gsub("\\("," ", .)} %>%                           #Remove all (
+  {gsub("\\)"," ", .)} %>%                           #Remove all )
+  {gsub("\""," ", .)} %>%                           #Remove all "
+  {gsub("\\,"," ", .)} %>%                            #Remove all ,
+  {gsub("&"," and ", .)} %>%                       # Find general time
+  {gsub("\"+"," ", .)} %>%                         # Remove all "
+  {gsub("\\|+"," ", .)} %>%                        # Remove all |
+  {gsub("_+"," ", .)} %>%                          # Remove all _
+  {gsub(";+"," ", .)} %>%                          # Remove excess ;
+  {gsub(" +"," ", .)} %>%                          # Remove excess spaces
+  {gsub("\\.+","\\.", .)}                          # Remove excess .
+
+#stemming, unnesting and removing stop words and create word vector
+j <- 1
+for (j in 1:nrow(reviews)) {
+  stemmed_description <- anti_join((reviews[j,] %>% unnest_tokens(word,text, drop=FALSE,to_lower=TRUE) ),stop_words)
+  
+  stemmed_description <- (wordStem(stemmed_description[,"word"], language = "porter"))
+  
+  reviews[j,"text"] <- paste((stemmed_description),collapse = " ")
+  
+}
+
+reviews_vector <- reviews %>% unnest_tokens(word,text, to_lower=TRUE)
+
+#remove very frequent and infrequent words
+counts <- reviews_vector %>% count(word, sort=TRUE)
+infrequent <- counts %>% filter(n <0.00005 * nrow(reviews_vector))
+frequent <- counts[1:2,] #remove words ski and "c"
+toremove <- full_join(frequent,infrequent)
+reviews_vector_cleaned <- reviews_vector %>% anti_join(toremove
+
+j<-1 
+for (j in 1:nrow(reviews)) {
+ stemmed_Review<-  anti_join((reviews[j,] %>% unnest_tokens(word,Review,to_lower=TRUE)),
+                             toremove)
+  
+ reviews[j,"Review"]<- paste((stemmed_Review[,"word"]),collapse = " ")
+
+}
+save(reviews, file="partially_cleaned_reviews.Rdata") 
+```
+
