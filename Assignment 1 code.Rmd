@@ -84,7 +84,8 @@ reviews$text <- as.character(reviews$text)  %>%
 #stemming, unnesting and removing stop words and create word vector
 j <- 1
 for (j in 1:nrow(reviews)) {
-  stemmed_description <- anti_join((reviews[j,] %>% unnest_tokens(word,text, drop=FALSE,to_lower=TRUE) ),stop_words)
+  stemmed_description <- anti_join((reviews[j,] %>% 
+                                      unnest_tokens(word,text, drop=FALSE,to_lower=TRUE) ),stop_words)
   
   stemmed_description <- (wordStem(stemmed_description[,"word"], language = "porter"))
   
@@ -92,59 +93,67 @@ for (j in 1:nrow(reviews)) {
   
 }
 
-reviews_vector <- reviews %>% unnest_tokens(word,text, to_lower=TRUE)
+reviews_vector <- reviews %>% 
+                    unnest_tokens(word,text, to_lower=TRUE)
 
 #remove very frequent and infrequent words
-counts <- reviews_vector %>% count(word, sort=TRUE)
-infrequent <- counts %>% filter(n <0.00005 * nrow(reviews_vector))
+counts <- reviews_vector %>% 
+            count(word, sort=TRUE)
+infrequent <- counts %>% 
+                filter(n <0.00005 * nrow(reviews_vector))
 frequent <- counts[1:1,] #remove words ski and "c"
 toremove <- full_join(frequent,infrequent)
-reviews_vector_cleaned <- reviews_vector %>% anti_join(toremove)
+reviews_vector_cleaned <- reviews_vector %>% 
+                            anti_join(toremove)
 
-j<-1 
+save(reviews_vector_cleaned, file="cleanedwordvector.Rdata") # (2) fully cleaned word vector representation
+
+
 # Creating the full review from the cleaned and stemmed words
+j<-1 
 for (j in 1:nrow(reviews)) {
- stemmed_Review<-  anti_join((reviews[j,] %>% unnest_tokens(word,text,to_lower=TRUE)),
-                             toremove)
+ stemmed_Review<-  anti_join((reviews[j,] %>% 
+                                unnest_tokens(word,text,to_lower=TRUE)), toremove)
   
  reviews[j,"text"]<- paste((stemmed_Review[,"word"]),collapse = " ")
 
 }
-#save(reviews, file="partially_cleaned_reviews.Rdata") 
-
 # Remove empty reviews
 reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
 
-
-#reviews is reviews_df in lecture 2 code
-
+save(reviews, file="partially_cleaned_reviews.Rdata") # full sentences
 ```
 
 Stage 2
 MDS
 
 ```{r}
-# MDS
+load(file= 'partially_cleaned_reviews.Rdata')
 
+# Creating distance matrix
 reviews_corp <- corpus(reviews, docid_field = "ID", text_field = "text")
-co_occurrence_matrix <- fcm(x = reviews_corp, context = "document", count = "frequency", tri=FALSE)
-# Moeten we "context = document gebruiken of context = window?"
-# Moeten we count = frequency of count = boolean gebruiken?
+co_occurrence_matrix <- fcm(x = reviews_corp, context = "document", count = "frequency", tri=FALSE) # get feature co-occurence matrix: number of co-occurences of words
 
-reviews_dfm <- dfm(reviews_corp) # get document frequency matrix
-counts <- colSums(as.matrix(reviews_dfm)) 
+# Moeten we "context = document gebruiken of context = window?" --> JELLE: document omdat we alle woordenaantallen willen pakken in de hele review (https://stackoverflow.com/questions/55509338/is-there-an-r-function-for-finding-keywords-within-a-certain-word-distance)
+# Moeten we count = frequency of count = boolean gebruiken? -> JELLE: frequency geeft aan hoe vaak woorden in eenzelfde review bevinden, boolean geeft alleen ja/nee, frequency lijkt mij daarom relevanter
+
+reviews_dfm <- dfm(reviews_corp) # get document frequency matrix: how frequent does each term appear in each document
+counts <- colSums(as.matrix(reviews_dfm)) # calculate total count of documents
 co_occurrence_matrix <- as.matrix(co_occurrence_matrix)
-diag(co_occurrence_matrix) <- counts
+diag(co_occurrence_matrix) <- counts # adjusts diagonal counts upward (also single counts)
 
+# take a subset of the most frequent words
 sortedcount <- counts%>% sort(decreasing=TRUE)
 sortednames <- names(sortedcount)
 nwords<-200
 subset_words<-as.matrix(sortedcount[1:nwords])
-co_occurrence_matrix <- co_occurrence_matrix[sortednames[1:nwords],sortednames[1:nwords]]
-co_occurrence_matrix[1:15,1:15]
-distances <- sim2diss(co_occurrence_matrix, method = "cooccurrence") # Transform similarities to distances.
-distances[1:15,1:15]
 
+# create a subset of the original co_occurance_matrix
+co_occurrence_matrix <- co_occurrence_matrix[sortednames[1:nwords],sortednames[1:nwords]]
+distances <- sim2diss(co_occurrence_matrix, method = "cooccurrence") # Transform similarities to distances.
+```
+
+```{r}
 
 MDS_map <- smacofSym(distances) # run the routine that finds the best matching coordinates in a 2D mp given the distances
 ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf))) +
@@ -155,24 +164,31 @@ ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf)))
 
 PCA
 ```{r}
-review_tdm <- reviews %>% unnest_tokens(word,text) %>% count(word,ID,sort=TRUE) %>%ungroup()%>%cast_tdm(word,ID,n)
+review_tdm <- reviews %>% 
+                  unnest_tokens(word,text) %>% 
+                      count(word,ID,sort=TRUE) %>%
+                        ungroup()%>%
+                          cast_tdm(word,ID,n)
 
+# take a subset of the most frequent words
 counts <- rowSums(as.matrix(review_tdm)) 
-sortedcount <- counts%>% sort(decreasing=TRUE)
+sortedcount <- counts %>% 
+                  sort(decreasing=TRUE)
 nwords<-200
 sortednames <- names(sortedcount[1:nwords])
 
 pca_results <- prcomp(t(review_tdm[,1:10000]), scale = FALSE, rank. = 50) # why do we set scale to FALSE? -> All data is measured on the same scale 
 pca_results_backup <- pca_results  # create a backup of results for later use
 ```
+
 ```{r}
 fviz_screeplot(pca_results,ncp=30)
-ncomp<-5
-
-# Hoe kies je ncomp?
 ```
 
 ```{r}
+ncomp<-5
+# Hoe kies je ncomp?
+
 j<-1
 toplist <- abs(pca_results$rotation[,j]) %>% sort(decreasing=TRUE) %>% head(10)
 topwords <- (names(toplist))
