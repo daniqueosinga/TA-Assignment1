@@ -52,7 +52,6 @@ Cleaning of the data, removing punctuation and if needed, stemming. Data must be
 - Version 1: The dataset without stemming and including punctuation (needed for stage three)
 - Version 2: The dataset as a complete fully cleaned word vector representation.
 
-
 ```{r}
 #Create backup for stage 3 (including punctuation): 
 reviews_backup <- reviews 
@@ -124,8 +123,7 @@ reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
 save(reviews, file="partially_cleaned_reviews.Rdata") # full sentences
 ```
 
-Stage 2
-MDS
+##Stage 2: MDS
 
 ```{r}
 load(file= 'partially_cleaned_reviews.Rdata')
@@ -162,7 +160,8 @@ ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf)))
 # the conf element in the MDS output contains the coordinatis with as names D1 and D2.
 ```
 
-PCA
+##PCA
+
 ```{r}
 review_tdm <- reviews %>% 
                   unnest_tokens(word,text) %>% 
@@ -239,8 +238,8 @@ topwords <-cbind( topwords , (names(toplist)))
   }
 
 topwords
-
 ```
+
 ```{r}
 pca_results_small <- pca_results
 pca_results_small$x <- pca_results_small$x[1:200,] # Keep only 200 reviews to plot
@@ -255,5 +254,98 @@ fviz_pca_var(pca_results, axes=axeslist
               gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
               repel = TRUE     # Avoid text overlapping
              )
+```
+
+##Sentiment analysis
+
+```{r}
+reviews_backup$text <- as.character(reviews_backup$text)  %>%
+                 tolower() %>%
+                 {gsub(":( |-|o)*\\("," SADSMILE ", .)} %>%       # Find :( or :-( or : ( or :o(
+                 {gsub(":( |-|o)*\\)"," HAPPYSMILE ", .)} %>%     # Find :) or :-) or : ) or :o)
+                 {gsub("\\n", " ", .)} %>%                    # Remove \n (newline)     
+                 {gsub("[?!]+", ".", .)} %>%                  # Remove ? and ! (replace by single .)
+                 {gsub("[\\[\\*\\]]*", " ", .)} %>%           # Remove [ and ] * (replace by single space)
+                 {gsub("(\"| |\\$)-+\\.-+", " number ", .)} %>%# Find numbers
+                 {gsub("(-+:)*-+ *am", " timeam", .)} %>%     # Find time AM
+                 {gsub("(-+:)*-+ *pm", " timepm", .)} %>%     # Find time PM
+                 {gsub("-+:-+", "time", .)} %>%               # Find general time
+                 {gsub("( |\\$)--+", " number ", .)} %>%      # Find remaining numbers
+                 {gsub("-"," ", .)} %>%                       # Remove all -
+                 {gsub("\"+", " ", .)} %>%                    # Remove all "
+                 {gsub(";+", " ", .)} %>%                     # Remove excess ;
+                 {gsub("\\.+","\\. ", .)} %>%                 # Remove excess .
+                 {gsub(" +"," ", .)} %>%                      # Remove excess spaces
+                 {gsub("\\. \\.","\\. ", .)}                  # Remove space between periods
+
+#create subset for testing
+reviews_test <- reviews_backup[1:500,]
+                           
+all_words <- reviews_test[,] %>%
+             unnest_tokens("text", output = "word") %>%
+             anti_join(stop_words, by = "word") %>%
+             count(word, sort = TRUE) %>%
+             filter(n>50)
+sentiment_scores <- polarity(all_words$word)$all        # get sentiment with polarity function
+all_words$sentiment <- sentiment_scores[,"polarity"]
+
+# Create plot
+all_words %>%
+#  filter(n > 1500) %>%
+  filter(sentiment != 0) %>%
+  mutate(n = ifelse(sentiment == -1, -n, n)) %>%
+  mutate(word = reorder(word, n)) %>%
+  mutate(Sentiment = ifelse(sentiment == 1, "Postive","Negative")) %>%
+  ggplot(aes(word, n, fill = Sentiment)) +
+  geom_col() +
+  coord_flip() +
+  labs(y = "Contribution to \"total\" sentiment", x = "Word (min freq = 50)")
+```
+
+```{r}
+pol <- polarity(reviews_test[, "text"])$all
+# Set negators and amplifiers on empty to see how it influences polarity score
+pol2 <- polarity(reviews_test[,'text'], negators = vector(), amplifiers = vector(), )$all
+# Standard uses the dictionary of qdap, here it is empty. Maybe use a dictionary of another source to compare.
+
+reviews_test$polarity <- pol[, "polarity"]
+reviews_test$polarity2 <- pol2[,"polarity"]
+#remove empty reviews
+reviews_test<-reviews_df[!(reviews_df$polarity=="NaN"),]
 
 ```
+
+```{r}
+# Split reviews
+pos_reviews      <- reviews_test %>% filter(stars >= 4)
+neg_reviews      <- reviews_test %>% filter(stars < 4) #change to < 3?
+
+#get mean values of bing and polarity 
+for (v in c("sent_bing","polarity","polarity2")) {
+  cat(v)
+  cat(" ", mean(neg_reviews[, v]), " ", mean(pos_reviews[, v]), "\n")
+}
+```
+
+```{r}
+#Polarity plots
+ggplot( ,aes(polarity)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+
+ggplot( ,aes(polarity)) +
+    geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+
+```
+
+```{r}
+#Polarity plots with negators and amplifiers on 0 
+ggplot( ,aes(polarity2)) +
+    geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+```
+
