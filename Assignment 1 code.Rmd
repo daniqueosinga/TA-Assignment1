@@ -311,8 +311,7 @@ pol2 <- polarity(reviews_test[,'text'], negators = vector(), amplifiers = vector
 reviews_test$polarity <- pol[, "polarity"]
 reviews_test$polarity2 <- pol2[,"polarity"]
 #remove empty reviews
-reviews_test<-reviews_df[!(reviews_df$polarity=="NaN"),]
-
+reviews_test<-reviews_test[!(reviews_test$polarity=="NaN"),]
 ```
 
 ```{r}
@@ -321,10 +320,8 @@ pos_reviews      <- reviews_test %>% filter(stars >= 4)
 neg_reviews      <- reviews_test %>% filter(stars < 4) #change to < 3?
 
 #get mean values of bing and polarity 
-for (v in c("sent_bing","polarity","polarity2")) {
-  cat(v)
-  cat(" ", mean(neg_reviews[, v]), " ", mean(pos_reviews[, v]), "\n")
-}
+mean(pos_reviews$polarity, na.rm = TRUE)
+mean(neg_reviews$polarity, na.rm = TRUE)
 ```
 
 ```{r}
