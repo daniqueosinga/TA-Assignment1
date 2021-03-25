@@ -317,7 +317,7 @@ reviews_test<-reviews_test[!(reviews_test$polarity=="NaN"),]
 ```{r}
 # Split reviews
 pos_reviews      <- reviews_test %>% filter(stars >= 4)
-neg_reviews      <- reviews_test %>% filter(stars < 4) #change to < 3?
+neg_reviews      <- reviews_test %>% filter(stars < 3) #neutral reviews not taken into account
 
 #get mean values of bing and polarity 
 mean(pos_reviews$polarity, na.rm = TRUE)
@@ -346,3 +346,181 @@ ggplot( ,aes(polarity2)) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
 ```
 
+##LDA analysis
+```{r, LDA}
+library(topicmodels)
+reviews_backup$text %>% as.character(reviews_backup$text)  %>%
+  tolower() %>%
+  {gsub("\\n", " ", .)} %>%                        # Remove \n (newline)     
+  {gsub("[?!]+",".",.)} %>%                        # Remove ? and ! (replace by single .)
+  {gsub("[\\[\\*\\]]*"," ",.)} %>%                 # Remove [ and ] * (replace by single space)
+  {gsub("(\"| |\\$)-+\\.-+"," number ", .)} %>%    # Find numbers
+  {gsub("(-+:)*-+ *am"," timeam", .)} %>%          # Find time AM
+  {gsub("(-+:)*-+ *pm"," timepm", .)} %>%          # Find time PM
+  {gsub("-+:-+","time", .)} %>%                    # Find general time
+  {gsub("( |\\$)--+"," number ", .)} %>%           # Find remaining numbers
+  {gsub("-"," ", .)} %>%                           # Remove all -
+  {gsub("\"+"," ", .)} %>%                         # Remove all "
+  {gsub(";+"," ", .)} %>%                          # Remove excess ;
+  {gsub("\\.+","\\. ", .)} %>%                     # Remove excess .
+  {gsub(" +"," ", .)} %>%                          # Remove excess spaces
+  {gsub("\\. \\.","\\. ", .)}                      # Remove space between periods
+
+index <- sample(1:nrow(reviews_backup), 2000)
+reviews_lda_subset <- reviews_backup[index,]
+save(reviews_lda_subset, file="reviews_lda_subset.Rdata")
+
+#create dtm 
+corpus <- Corpus(VectorSource(unlist(reviews_lda_subset[, "text"])))
+dtm <- DocumentTermMatrix(corpus, control = list(stemming = TRUE, stopwords = TRUE, 
+                                                 wordLengths = c(3,20), removeNumbers = TRUE, 
+                                                 removePunctuation = TRUE))
+
+#Remove words that do not appear often enough (next remove documents that may now be empty)
+library(slam)
+term_count <- col_sums(dtm > 0)
+term_perc <- term_count / nrow(dtm)
+
+lowFreq <- (col_sums(dtm)<1)
+dtm <- dtm[, !lowFreq]
+dtm <- dtm[row_sums(dtm) > 0,]
+summary(col_sums(dtm))
+n <- nrow(dtm)
+dim(dtm)
+
+#split into validation (20%) and train (80%)
+set.seed(seed=2020)
+train <- sample(1:n, round(n * 0.80))
+valid <- (1:n)[-train]
+```
+
+```{r}
+#Estimate LDA for different values of K and collect perplexity values 
+#Use perplexity to determine value of alpha
+#Loow perplexity is good 
+res <- NULL
+TMlist <- list()  # list to collect results
+
+for (l in seq(10, 50, 10))
+{
+  print(l)
+  
+  TM <- LDA(dtm[train, ], method="Gibbs", k = l) #, control = list(alpha = 0.5))
+  
+  p       <- perplexity(TM, newdata = dtm[train,])
+  p_valid <- perplexity(TM, newdata = dtm[valid, ])
+  
+  res <- rbind(res, data.frame(k=l, perplexity = p, perplexity_validation = p_valid))
+  TMlist <- append(TMlist, TM)
+}
+print(res)
+```
+
+Lowest perplexity at K = 30
+
+```{r}
+#Plot perplexity 
+ggplot(res, aes(k)) +                    
+  geom_line(aes(y=perplexity, colour="Train")) +
+  geom_line(aes(y=perplexity_validation, colour="Validation")) + labs(colour="Sample")
+
+# Print results with best perplexity
+res[which.min(res$perplexity_validation),]
+#both train and validation lowest at K = 30 
+
+#estimate for different values of alpha at K = 30
+k <- 30
+SEED <- 2020
+resAlpha <- NULL
+TMlistAlpha <- list()
+
+for (a in seq(.5, 3, .5))
+{
+  print(a)
+  
+  TMAlpha <- LDA(dtm[train, ], method="Gibbs", k = k, control = list(alpha = a))
+  
+  p <- perplexity(TMAlpha, newdata = dtm[train,])
+  p_valid <- perplexity(TMAlpha, newdata = dtm[valid, ])
+  
+  resAlpha <- rbind(resAlpha, data.frame(alpha=a, perplexity = p, perplexity_validation = p_valid))
+  TMlistAlpha <- append(TMlistAlpha, TMAlpha)
+}
+print(resAlpha)
+#perplexity lowest at alpha = ?  
+
+#few more alpha test
+for (a in seq(0.1, 0.4, .1))
+{
+  print(a)
+  
+  TMAlpha <- LDA(dtm[train, ], method="Gibbs", k = k, control = list(alpha = a))
+  
+  p <- perplexity(TMAlpha, newdata = dtm[train,])
+  p_valid <- perplexity(TMAlpha, newdata = dtm[valid, ])
+  
+  resAlpha <- rbind(resAlpha, data.frame(alpha=a, perplexity = p, perplexity_validation = p_valid))
+  TMlistAlpha <- append(TMlistAlpha, TMAlpha)
+}
+print(resAlpha)
+
+#plot perplexity vs alpha
+ggplot(resAlpha, aes(alpha)) +                    
+  geom_line(aes(y=perplexity, colour="Train")) +   
+  geom_line(aes(y=perplexity_validation, colour="Validation"))  +
+  labs(colour="Sample")
+
+# Show best alpha
+resAlpha[which.min(resAlpha$perplexity_validation),]
+#alpha = 0.4
+
+#so K = 30, alpha = 0.3
+alpha = 0.4
+TM <- LDA(dtm[train, ], k = k, method="Gibbs", control = list(seed = SEED, alpha=alpha))
+```
+
+```{r, LDA visualization}
+#visualize assignment to topics
+posterior(TM)$topics[1:15,]
+maxProb <- apply(posterior(TM)$topics, 1, max)
+hist(maxProb, main="Assignment to topics", xlab="Maximum topic probability")
+
+#Print term probabilities per topic
+p <- posterior(TM)$terms
+p[,1:8]
+
+#Show the "size" of each topic
+col_means(posterior(TM)$topics)
+
+#Most likely topic per document
+t <- topics(TM, 1)  
+as.matrix(t)[1:4] # show the first 4
+
+#Most likely terms per topic
+Terms <- terms(TM, 5)
+Terms[,1:5]
+
+#Graphically show most likely terms
+text_topics <- tidy(TM, matrix = "beta")
+text_topics
+
+text_top_terms <- text_topics %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+perplot <- 6
+for (i in 1:ceiling(k/perplot))
+{
+  p <- text_top_terms %>%
+    filter(topic > (i-1)*perplot & topic<=(i*perplot)) %>%
+    mutate(term = reorder_within(term, beta, topic)) %>%
+    ggplot(aes(term, beta, fill = factor(topic))) +
+    geom_col(show.legend = FALSE) +
+    facet_wrap(~ topic, scales = "free") +
+    coord_flip()+
+    scale_x_reordered()
+  show(p)
+}
+```
