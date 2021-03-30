@@ -349,7 +349,7 @@ ggplot( ,aes(polarity2)) +
 ##LDA analysis
 ```{r, LDA}
 library(topicmodels)
-reviews_backup$text %>% as.character(reviews_backup$text)  %>%
+reviews_backup$text <- as.character(reviews_backup$text)  %>%
   tolower() %>%
   {gsub("\\n", " ", .)} %>%                        # Remove \n (newline)     
   {gsub("[?!]+",".",.)} %>%                        # Remove ? and ! (replace by single .)
