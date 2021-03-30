@@ -208,7 +208,8 @@ fviz_pca_var(pca_results, axes=axeslist
              ,geom.var = c("arrow", "text")
               ,col.var = "contrib", # Color by contributions to the PC
               gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-              repel = TRUE     # Avoid text overlapping
+              repel = TRUE,# Avoid text overlapping
+             select.var = list(contrib = 10) 
              )
 
 
@@ -252,14 +253,16 @@ fviz_pca_var(pca_results, axes=axeslist
              ,geom.var = c("arrow", "text")
               ,col.var = "contrib", # Color by contributions to the PC
               gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-              repel = TRUE     # Avoid text overlapping
+              repel = TRUE,     # Avoid text overlapping,
+             select.var = list(contrib = 10) 
              )
 ```
 
 ##Sentiment analysis
 
 ```{r}
-reviews_backup$text <- as.character(reviews_backup$text)  %>%
+reviews_sentiment <- reviews_backup
+reviews_sentiment$text <- as.character(reviews_sentiment$text)  %>%
                  tolower() %>%
                  {gsub(":( |-|o)*\\("," SADSMILE ", .)} %>%       # Find :( or :-( or : ( or :o(
                  {gsub(":( |-|o)*\\)"," HAPPYSMILE ", .)} %>%     # Find :) or :-) or : ) or :o)
@@ -279,13 +282,15 @@ reviews_backup$text <- as.character(reviews_backup$text)  %>%
                  {gsub("\\. \\.","\\. ", .)}                  # Remove space between periods
 
 #create subset for testing
-reviews_test <- reviews_backup[1:500,]
+#reviews_test <- reviews_sentiment[1:500,]
+
+0.05*nrow(reviews_sentiment)
                            
-all_words <- reviews_test[,] %>%
+all_words <- reviews_sentiment[,] %>%
              unnest_tokens("text", output = "word") %>%
              anti_join(stop_words, by = "word") %>%
              count(word, sort = TRUE) %>%
-             filter(n>50)
+             filter(n> 0.05*nrow(reviews_sentiment))
 sentiment_scores <- polarity(all_words$word)$all        # get sentiment with polarity function
 all_words$sentiment <- sentiment_scores[,"polarity"]
 
@@ -299,29 +304,37 @@ all_words %>%
   ggplot(aes(word, n, fill = Sentiment)) +
   geom_col() +
   coord_flip() +
-  labs(y = "Contribution to \"total\" sentiment", x = "Word (min freq = 50)")
+  labs(y = "Contribution to \"total\" sentiment", x = "Word (min freq = 5% of observations)")
 ```
 
 ```{r}
-pol <- polarity(reviews_test[, "text"])$all
+pol <- polarity(reviews_sentiment[, "text"])$all
 # Set negators and amplifiers on empty to see how it influences polarity score
-pol2 <- polarity(reviews_test[,'text'], negators = vector(), amplifiers = vector(), )$all
+pol2 <- polarity(reviews_sentiment[,'text'], negators = vector(), amplifiers = vector(), )$all
 # Standard uses the dictionary of qdap, here it is empty. Maybe use a dictionary of another source to compare.
 
-reviews_test$polarity <- pol[, "polarity"]
-reviews_test$polarity2 <- pol2[,"polarity"]
+reviews_sentiment$polarity <- pol[, "polarity"]
+reviews_sentiment$polarity2 <- pol2[,"polarity"]
 #remove empty reviews
-reviews_test<-reviews_test[!(reviews_test$polarity=="NaN"),]
+reviews_sentiment<-reviews_sentiment[!(reviews_sentiment$polarity=="NaN"),]
+
+
+#Save with polarity
+#save(reviews_sentiment, file="reviews_sentiment_with_polarity.Rdata")
+
 ```
 
 ```{r}
 # Split reviews
-pos_reviews      <- reviews_test %>% filter(stars >= 4)
-neg_reviews      <- reviews_test %>% filter(stars < 3) #neutral reviews not taken into account
+pos_reviews      <- reviews_sentiment %>% filter(stars >= 4)
+neg_reviews      <- reviews_sentiment %>% filter(stars < 3) #neutral reviews not taken into account
 
 #get mean values of bing and polarity 
 mean(pos_reviews$polarity, na.rm = TRUE)
 mean(neg_reviews$polarity, na.rm = TRUE)
+
+## Save pos_reviews & neg_reviews
+
 ```
 
 ```{r}
@@ -349,6 +362,7 @@ ggplot( ,aes(polarity2)) +
 ##LDA analysis
 ```{r, LDA}
 library(topicmodels)
+
 reviews_backup$text <- as.character(reviews_backup$text)  %>%
   tolower() %>%
   {gsub("\\n", " ", .)} %>%                        # Remove \n (newline)     
