@@ -43,7 +43,8 @@ text.df <- read.csv("OnTheSnow_SkiAreaReviews.csv", comment.char="#")
 reviews <- data.frame(ID=seq(1:nrow(text.df)),
                       text=text.df$Review.Text, 
                       stars=text.df$Review.Star.Rating..out.of.5.) 
-
+#Create backup for stage 3 (including punctuation): 
+reviews_backup <- reviews 
 ```
 
 ## Stage one
@@ -53,8 +54,8 @@ Cleaning of the data, removing punctuation and if needed, stemming. Data must be
 - Version 2: The dataset as a complete fully cleaned word vector representation.
 
 ```{r, warning = FALSE, message = FALSE}
-#Create backup for stage 3 (including punctuation): 
-reviews_backup <- reviews 
+
+# Deze kan je overslaan als je de chunk hieronder de saved files inlaad
 
 #First stage of cleaning
 reviews$text <- as.character(reviews$text)  %>% 
@@ -105,7 +106,7 @@ toremove <- full_join(frequent,infrequent)
 reviews_vector_cleaned <- reviews_vector %>% 
                             anti_join(toremove)
 
-save(reviews_vector_cleaned, file="cleanedwordvector.Rdata") # (2) fully cleaned word vector representation
+#save(reviews_vector_cleaned, file="cleanedwordvector.Rdata") # (2) fully cleaned word vector representation
 
 
 # Creating the full review from the cleaned and stemmed words
@@ -120,17 +121,18 @@ for (j in 1:nrow(reviews)) {
 # Remove empty reviews
 reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
 
-save(reviews, file="partially_cleaned_reviews.Rdata") # full sentences
+#save(reviews, file="partially_cleaned_reviews.Rdata") # full sentences
 ```
 
 ##Stage 2: MDS
 
 ```{r}
 load(file= 'partially_cleaned_reviews.Rdata')
+load(file = "cleanedwordvector.Rdata")
 
 # Creating distance matrix
 reviews_corp <- corpus(reviews, docid_field = "ID", text_field = "text")
-co_occurrence_matrix <- fcm(x = reviews_corp, context = "document", count = "frequency", tri=FALSE) # get feature co-occurence matrix: number of co-occurences of words
+co_occurrence_matrix <- fcm(x = reviews_corp, context = "window", count = "frequency", tri=FALSE, window = 5) # get feature co-occurence matrix: number of co-occurences of words
 
 # Moeten we "context = document gebruiken of context = window?" --> JELLE: document omdat we alle woordenaantallen willen pakken in de hele review (https://stackoverflow.com/questions/55509338/is-there-an-r-function-for-finding-keywords-within-a-certain-word-distance)
 # Moeten we count = frequency of count = boolean gebruiken? -> JELLE: frequency geeft aan hoe vaak woorden in eenzelfde review bevinden, boolean geeft alleen ja/nee, frequency lijkt mij daarom relevanter
@@ -163,6 +165,8 @@ ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf)))
 ##PCA
 
 ```{r}
+#Deze chunk kan je overslaan als je de volgende chunk gebruikt om de PCA results in te laden
+
 review_tdm <- reviews %>% 
                   unnest_tokens(word,text) %>% 
                       count(word,ID,sort=TRUE) %>%
@@ -178,14 +182,21 @@ sortednames <- names(sortedcount[1:nwords])
 
 pca_results <- prcomp(t(review_tdm[,1:10000]), scale = FALSE, rank. = 50) # why do we set scale to FALSE? -> All data is measured on the same scale 
 pca_results_backup <- pca_results  # create a backup of results for later use
+
+#Save pca results
+save(pca_results, file = 'pca_results.Rdata')
+
+
 ```
 
 ```{r}
+load(file = "pca_results.Rdata")
+pca_results_backup <- pca_results
 fviz_screeplot(pca_results,ncp=30)
 ```
 
 ```{r}
-ncomp<-5
+ncomp<-2
 # Hoe kies je ncomp?
 
 j<-1
@@ -217,7 +228,7 @@ fviz_pca_var(pca_results, axes=axeslist
 
 ```{r}
 
-rawLoadings     <- pca_results$rotation[sortednames,1:ncomp] %*% diag(pca_results$sdev, ncomp, ncomp)
+rawLoadings <- pca_results$rotation[sortednames,1:ncomp] %*% diag(pca_results$sdev, ncomp, ncomp)
 rotated <- varimax(rawLoadings)
 pca_results$rotation <- rotated$loadings
 pca_results$x <- scale(pca_results$x[,1:ncomp]) %*% rotated$rotmat
@@ -314,10 +325,17 @@ all_words %>%
 pol <- polarity(reviews_sentiment[, "text"])$all
 # Set negators and amplifiers on empty to see how it influences polarity score
 pol2 <- polarity(reviews_sentiment[,'text'], negators = vector(), amplifiers = vector(), )$all
-# Standard uses the dictionary of qdap, here it is empty. Maybe use a dictionary of another source to compare.
+# Set negators on empty, set amplifier normal
+pol3 <- polarity(reviews_sentiment[,'text'], negators = vector(), amplifiers = qdapDictionaries::amplification.words, )$all
+# Set negators normal, amplification empty
+pol4 <- polarity(reviews_sentiment[,'text'], negators = qdapDictionaries::negation.words, amplifiers = vector(), )$all
+
+
 
 reviews_sentiment$polarity <- pol[, "polarity"]
 reviews_sentiment$polarity2 <- pol2[,"polarity"]
+reviews_sentiment$polarity3 <- pol3[,"polarity"]
+reviews_sentiment$polarity4 <- pol4[,"polarity"]
 #remove empty reviews
 reviews_sentiment<-reviews_sentiment[!(reviews_sentiment$polarity=="NaN"),]
 
@@ -341,6 +359,12 @@ neg_reviews      <- reviews_sentiment %>% filter(stars < 3) #neutral reviews not
 #get mean values of bing and polarity 
 mean(pos_reviews$polarity, na.rm = TRUE)
 mean(neg_reviews$polarity, na.rm = TRUE)
+mean(pos_reviews$polarity2, na.rm = TRUE)
+mean(neg_reviews$polarity2, na.rm = TRUE)
+mean(pos_reviews$polarity3, na.rm = TRUE)
+mean(neg_reviews$polarity3, na.rm = TRUE)
+mean(pos_reviews$polarity4, na.rm = TRUE)
+mean(neg_reviews$polarity4, na.rm = TRUE)
 
 ```
 
@@ -349,22 +373,63 @@ mean(neg_reviews$polarity, na.rm = TRUE)
 ggplot( ,aes(polarity)) +
     geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
-    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") +
+  ggtitle("Polarity histogram with negators and amplifiers")
 
 ggplot( ,aes(polarity)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
-    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") +
+  ggtitle("Polarity histogram with negators and amplifiers")
 
 ```
 
 ```{r}
 #Polarity plots with negators and amplifiers on 0 
 ggplot( ,aes(polarity2)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
+  ggtitle("Polarity histogram with no negators and no amplifiers") + labs(x = "polarity")
+
+ggplot( ,aes(polarity2)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
-    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
+  ggtitle("Polarity histogram with no negators and no amplifiers") + labs(x = "polarity")
 ```
+
+```{r}
+#Polarity plots with negators and amplifiers on 0 
+ggplot( ,aes(polarity3)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
+  ggtitle("Polarity histogram with no negators and with amplifiers")+ labs(x = "polarity")
+
+ggplot( ,aes(polarity3)) +
+    geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
+  ggtitle("Polarity histogram with no negators and with amplifiers")+ labs(x = "polarity")
+```
+
+```{r}
+#Polarity plots with negators and amplifiers on 0 
+ggplot( ,aes(polarity3)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
+  ggtitle("Polarity histogram with negators and with no amplifiers")+ labs(x = "polarity")
+
+ggplot( ,aes(polarity3)) +
+    geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
+  ggtitle("Polarity histogram with negators and with no amplifiers")+ labs(x = "polarity")
+```
+
+
 
 ##LDA analysis
 ```{r, LDA}
