@@ -184,14 +184,16 @@ pca_results <- prcomp(t(review_tdm[,1:10000]), scale = FALSE, rank. = 50) # why 
 pca_results_backup <- pca_results  # create a backup of results for later use
 
 #Save pca results
-save(pca_results, file = 'pca_results.Rdata')
-
+#saveRDS(pca_results_backup,'pca_results.rds')
 
 ```
 
 ```{r}
-load(file = "pca_results.Rdata")
-pca_results_backup <- pca_results
+#load(file = "pca_results.Rdata")
+pca_results <- readRDS(file = "pca_results.rds")
+
+
+#pca_results_backup <- pca_results
 fviz_screeplot(pca_results,ncp=30)
 ```
 
@@ -572,6 +574,9 @@ resAlpha[which.min(resAlpha$perplexity_validation),]
 ```
 
 ```{r}
+
+#Vanaf hier LDA inladen
+library(topicmodels)
 load(file = 'resAlpha.Rdata')
 
 #so K = 30, alpha = 0.3
