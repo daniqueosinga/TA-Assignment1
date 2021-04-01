@@ -374,13 +374,13 @@ ggplot( ,aes(polarity)) +
     geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") +
-  ggtitle("Polarity histogram with negators and amplifiers")
+  ggtitle("Polarity histogram with negators and with amplifiers")
 
 ggplot( ,aes(polarity)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") +
-  ggtitle("Polarity histogram with negators and amplifiers")
+  ggtitle("Polarity histogram with negators and with amplifiers")
 
 ```
 
@@ -405,28 +405,28 @@ ggplot( ,aes(polarity3)) +
     geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
-  ggtitle("Polarity histogram with no negators and with amplifiers")+ labs(x = "polarity")
+  ggtitle("Polarity histogram with no negators but with amplifiers")+ labs(x = "polarity")
 
 ggplot( ,aes(polarity3)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
-  ggtitle("Polarity histogram with no negators and with amplifiers")+ labs(x = "polarity")
+  ggtitle("Polarity histogram with no negators but with amplifiers")+ labs(x = "polarity")
 ```
 
 ```{r}
 #Polarity plots with negators and amplifiers on 0 
-ggplot( ,aes(polarity3)) +
+ggplot( ,aes(polarity4)) +
     geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
-  ggtitle("Polarity histogram with negators and with no amplifiers")+ labs(x = "polarity")
+  ggtitle("Polarity histogram with negators but with no amplifiers")+ labs(x = "polarity")
 
-ggplot( ,aes(polarity3)) +
+ggplot( ,aes(polarity4)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
     scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
-  ggtitle("Polarity histogram with negators and with no amplifiers")+ labs(x = "polarity")
+  ggtitle("Polarity histogram with negators but with no amplifiers")+ labs(x = "polarity")
 ```
 
 
@@ -435,7 +435,9 @@ ggplot( ,aes(polarity3)) +
 ```{r, LDA}
 library(topicmodels)
 
-reviews_backup$text <- as.character(reviews_backup$text)  %>%
+
+reviews_lda <- reviews_backup
+reviews_lda$text <- as.character(reviews_lda$text)  %>%
   tolower() %>%
   {gsub("\\n", " ", .)} %>%                        # Remove \n (newline)     
   {gsub("[?!]+",".",.)} %>%                        # Remove ? and ! (replace by single .)
@@ -452,9 +454,12 @@ reviews_backup$text <- as.character(reviews_backup$text)  %>%
   {gsub(" +"," ", .)} %>%                          # Remove excess spaces
   {gsub("\\. \\.","\\. ", .)}                      # Remove space between periods
 
-index <- sample(1:nrow(reviews_backup), 2000)
+index <- sample(1:nrow(reviews_lda), 2000)
 reviews_lda_subset <- reviews_backup[index,]
-save(reviews_lda_subset, file="reviews_lda_subset.Rdata")
+#save(reviews_lda_subset, file="reviews_lda_subset.Rdata")
+
+
+load(file = 'reviews_lda_subset.Rdata')
 
 #create dtm 
 corpus <- Corpus(VectorSource(unlist(reviews_lda_subset[, "text"])))
@@ -484,11 +489,13 @@ valid <- (1:n)[-train]
 #Estimate LDA for different values of K and collect perplexity values 
 #Use perplexity to determine value of alpha
 #Loow perplexity is good 
+
+#Deze duurt lang. Run de chunk die de alpha inlaadt
+
 res <- NULL
 TMlist <- list()  # list to collect results
 
-for (l in seq(10, 50, 10))
-{
+for (l in seq(10, 50, 10)) {
   print(l)
   
   TM <- LDA(dtm[train, ], method="Gibbs", k = l) #, control = list(alpha = 0.5))
@@ -558,12 +565,21 @@ ggplot(resAlpha, aes(alpha)) +
 
 # Show best alpha
 resAlpha[which.min(resAlpha$perplexity_validation),]
-#alpha = 0.4
+#alpha = 0.3
+
+#save(resAlpha, file = 'resAlpha.Rdata')
+
+```
+
+```{r}
+load(file = 'resAlpha.Rdata')
 
 #so K = 30, alpha = 0.3
-alpha = 0.4
+alpha = resAlpha[which.min(resAlpha$perplexity_validation),]$alpha
+
 TM <- LDA(dtm[train, ], k = k, method="Gibbs", control = list(seed = SEED, alpha=alpha))
 ```
+
 
 ```{r, LDA visualization}
 #visualize assignment to topics
