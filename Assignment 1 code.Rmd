@@ -52,7 +52,7 @@ Cleaning of the data, removing punctuation and if needed, stemming. Data must be
 - Version 1: The dataset without stemming and including punctuation (needed for stage three)
 - Version 2: The dataset as a complete fully cleaned word vector representation.
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 #Create backup for stage 3 (including punctuation): 
 reviews_backup <- reviews 
 
@@ -308,6 +308,9 @@ all_words %>%
 ```
 
 ```{r}
+
+#Deze functie duurt heel lang. Dus je kan beter in de chunk onder deze de data loaden.
+
 pol <- polarity(reviews_sentiment[, "text"])$all
 # Set negators and amplifiers on empty to see how it influences polarity score
 pol2 <- polarity(reviews_sentiment[,'text'], negators = vector(), amplifiers = vector(), )$all
@@ -322,9 +325,15 @@ reviews_sentiment<-reviews_sentiment[!(reviews_sentiment$polarity=="NaN"),]
 #Save with polarity
 #save(reviews_sentiment, file="reviews_sentiment_with_polarity.Rdata")
 
+
 ```
 
 ```{r}
+#load polarity data
+load(file= 'reviews_sentiment_with_polarity.Rdata')
+
+
+
 # Split reviews
 pos_reviews      <- reviews_sentiment %>% filter(stars >= 4)
 neg_reviews      <- reviews_sentiment %>% filter(stars < 3) #neutral reviews not taken into account
@@ -332,8 +341,6 @@ neg_reviews      <- reviews_sentiment %>% filter(stars < 3) #neutral reviews not
 #get mean values of bing and polarity 
 mean(pos_reviews$polarity, na.rm = TRUE)
 mean(neg_reviews$polarity, na.rm = TRUE)
-
-## Save pos_reviews & neg_reviews
 
 ```
 
