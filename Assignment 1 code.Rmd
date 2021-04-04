@@ -1,16 +1,22 @@
 ---
-title: "Assignment 1 ski data"
-author: "Larissa, Ralph, Danique en Jelle"
+title: "Assignment 1 Text Analytics"
+author: 
+  - "Larissa van Boxem"
+  - "Ralph Schuurman"
+  - "Danique Osinga"
+  - "Jelle WallenBurg"
 date: "3/22/2021"
 output: pdf_document
 ---
 
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 
 # Set options
 options(stringsAsFactors=F)
 Sys.setlocale('LC_ALL','C')
+
 
 # Loading libraries
 library(stringi)
@@ -34,7 +40,7 @@ library(quanteda)
 library(smacof)
 library(factoextra)
 library(readr)
-
+library(ggplot2)
 # Loading data files
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
@@ -53,7 +59,9 @@ Cleaning of the data, removing punctuation and if needed, stemming. Data must be
 - Version 1: The dataset without stemming and including punctuation (needed for stage three)
 - Version 2: The dataset as a complete fully cleaned word vector representation.
 
-```{r, warning = FALSE, message = FALSE}
+
+
+```{r, warning = FALSE, message = FALSE,, eval = FALSE}
 
 # Deze kan je overslaan als je de chunk hieronder de saved files inlaad
 
@@ -126,7 +134,7 @@ reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
 
 ##Stage 2: MDS
 
-```{r}
+```{r,, cache = TRUE}
 load(file= 'partially_cleaned_reviews.Rdata')
 load(file = "cleanedwordvector.Rdata")
 
@@ -153,19 +161,25 @@ co_occurrence_matrix <- co_occurrence_matrix[sortednames[1:nwords],sortednames[1
 distances <- sim2diss(co_occurrence_matrix, method = "cooccurrence") # Transform similarities to distances.
 ```
 
-```{r}
+```{r, cache = TRUE}
 
 MDS_map <- smacofSym(distances) # run the routine that finds the best matching coordinates in a 2D mp given the distances
+
+```
+
+```{r}
+library(ggplot2)
 ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf))) +
      geom_text(check_overlap = TRUE) + theme_minimal(base_size = 15) + xlab('') + ylab('') +
      scale_y_continuous(breaks = NULL) + scale_x_continuous(breaks = NULL)
 # the conf element in the MDS output contains the coordinatis with as names D1 and D2.
+
 ```
 
 ##PCA
 
 ```{r}
-#Deze chunk kan je overslaan als je de volgende chunk gebruikt om de PCA results in te laden
+
 
 review_tdm <- reviews %>% 
                   unnest_tokens(word,text) %>% 
@@ -180,11 +194,17 @@ sortedcount <- counts %>%
 nwords<-200
 sortednames <- names(sortedcount[1:nwords])
 
+
+```
+
+```{r, eval = FALSE}
+#Deze chunk kan je overslaan als je de volgende chunk gebruikt om de PCA results in te laden
 pca_results <- prcomp(t(review_tdm[,1:10000]), scale = FALSE, rank. = 50) # why do we set scale to FALSE? -> All data is measured on the same scale 
 pca_results_backup <- pca_results  # create a backup of results for later use
 
 #Save pca results
-#saveRDS(pca_results_backup,'pca_results.rds')
+#saveRDS(pca_results_loaded,'pca_results_loaded.rds')
+
 
 ```
 
@@ -194,10 +214,10 @@ pca_results <- readRDS(file = "pca_results.rds")
 
 
 #pca_results_backup <- pca_results
-fviz_screeplot(pca_results,ncp=30)
+#fviz_screeplot(pca_results,ncp=30)
 ```
 
-```{r}
+```{r, cache= TRUE}
 ncomp<-2
 # Hoe kies je ncomp?
 
@@ -229,14 +249,38 @@ fviz_pca_var(pca_results, axes=axeslist
 ```
 
 ```{r}
+# take a subset of the most frequent words
 
-rawLoadings <- pca_results$rotation[sortednames,1:ncomp] %*% diag(pca_results$sdev, ncomp, ncomp)
+load(file= 'partially_cleaned_reviews.Rdata')
+
+review_tdm <- reviews %>% 
+                  unnest_tokens(word,text) %>% 
+                      count(word,ID,sort=TRUE) %>%
+                        ungroup()%>%
+                          cast_tdm(word,ID,n)
+
+# take a subset of the most frequent words
+counts <- rowSums(as.matrix(review_tdm)) 
+sortedcount <- counts %>% 
+                  sort(decreasing=TRUE)
+nwords<-200
+sortednames <- names(sortedcount[1:nwords])
+
+
+ncomp <- 2
+#pca_results_test <- readRDS(file = "/Users/ralph/TA-Assignment1/pca_results_loaded.rds")
+pca_results_test <- readRDS(file = "pca_results_loaded.rds")
+rawLoadings <- pca_results_test$rotation[sortednames,1:ncomp] %*% diag(pca_results_test$sdev, ncomp, ncomp)
 rotated <- varimax(rawLoadings)
-pca_results$rotation <- rotated$loadings
-pca_results$x <- scale(pca_results$x[,1:ncomp]) %*% rotated$rotmat
+pca_results_test$rotation <- rotated$loadings
+pca_results_test$x <- scale(pca_results_test$x[,1:ncomp]) %*% rotated$rotmat
 
 
 print("PCA finished")
+
+print("PCA finished")
+
+pca_results <- pca_results_test
 
 ```
 
@@ -254,10 +298,10 @@ topwords <-cbind( topwords , (names(toplist)))
 topwords
 ```
 
-```{r}
-pca_results_small <- pca_results
-pca_results_small$x <- pca_results_small$x[1:200,] # Keep only 200 reviews to plot
-pca_results <- pca_results_small
+```{r, cache = TRUE}
+#pca_results_small <- pca_results
+#pca_results_small$x <- pca_results_small$x[1:200,] # Keep only 200 reviews to plot
+#pca_results <- pca_results_small
 ```
 
 ```{r warning = FALSE}
@@ -273,7 +317,7 @@ fviz_pca_var(pca_results, axes=axeslist
 
 ##Sentiment analysis
 
-```{r}
+```{r, cache = TRUE}
 reviews_sentiment <- reviews_backup
 reviews_sentiment$text <- as.character(reviews_sentiment$text)  %>%
                  tolower() %>%
@@ -307,6 +351,9 @@ all_words <- reviews_sentiment[,] %>%
 sentiment_scores <- polarity(all_words$word)$all        # get sentiment with polarity function
 all_words$sentiment <- sentiment_scores[,"polarity"]
 
+```
+```{r}
+
 # Create plot
 all_words %>%
 #  filter(n > 1500) %>%
@@ -320,7 +367,7 @@ all_words %>%
   labs(y = "Contribution to \"total\" sentiment", x = "Word (min freq = 5% of observations)")
 ```
 
-```{r}
+```{r, eval = FALSE}
 
 #Deze functie duurt heel lang. Dus je kan beter in de chunk onder deze de data loaden.
 
@@ -348,7 +395,7 @@ reviews_sentiment<-reviews_sentiment[!(reviews_sentiment$polarity=="NaN"),]
 
 ```
 
-```{r}
+```{r, cache = TRUE}
 #load polarity data
 load(file= 'reviews_sentiment_with_polarity.Rdata')
 
@@ -434,7 +481,7 @@ ggplot( ,aes(polarity4)) +
 
 
 ##LDA analysis
-```{r, LDA}
+```{r, LDA, cache = TRUE}
 library(topicmodels)
 
 
@@ -487,7 +534,7 @@ train <- sample(1:n, round(n * 0.80))
 valid <- (1:n)[-train]
 ```
 
-```{r}
+```{r, eval = FALSE}
 #Estimate LDA for different values of K and collect perplexity values 
 #Use perplexity to determine value of alpha
 #Loow perplexity is good 
@@ -508,16 +555,24 @@ for (l in seq(10, 50, 10)) {
   res <- rbind(res, data.frame(k=l, perplexity = p, perplexity_validation = p_valid))
   TMlist <- append(TMlist, TM)
 }
+
+save(res, file = 'res.Rdata')
+
 print(res)
 ```
 
 Lowest perplexity at K = 30
-
 ```{r}
 #Plot perplexity 
+load(file = 'res.Rdata')
+
 ggplot(res, aes(k)) +                    
   geom_line(aes(y=perplexity, colour="Train")) +
   geom_line(aes(y=perplexity_validation, colour="Validation")) + labs(colour="Sample")
+```
+
+```{r, eval= FALSE}
+
 
 # Print results with best perplexity
 res[which.min(res$perplexity_validation),]
@@ -559,11 +614,7 @@ for (a in seq(0.1, 0.4, .1))
 }
 print(resAlpha)
 
-#plot perplexity vs alpha
-ggplot(resAlpha, aes(alpha)) +                    
-  geom_line(aes(y=perplexity, colour="Train")) +   
-  geom_line(aes(y=perplexity_validation, colour="Validation"))  +
-  labs(colour="Sample")
+
 
 # Show best alpha
 resAlpha[which.min(resAlpha$perplexity_validation),]
@@ -578,7 +629,23 @@ resAlpha[which.min(resAlpha$perplexity_validation),]
 #Vanaf hier LDA inladen
 library(topicmodels)
 load(file = 'resAlpha.Rdata')
+```
 
+```{r}
+
+#plot perplexity vs alpha
+ggplot(resAlpha, aes(alpha)) +                    
+  geom_line(aes(y=perplexity, colour="Train")) +   
+  geom_line(aes(y=perplexity_validation, colour="Validation"))  +
+  labs(colour="Sample")
+
+
+
+```
+
+```{r,cache = TRUE}
+k <- 30
+SEED <- 2020
 #so K = 30, alpha = 0.3
 alpha = resAlpha[which.min(resAlpha$perplexity_validation),]$alpha
 
@@ -594,28 +661,34 @@ hist(maxProb, main="Assignment to topics", xlab="Maximum topic probability")
 
 #Print term probabilities per topic
 p <- posterior(TM)$terms
-p[,1:8]
+#p[,1:8]
 
 #Show the "size" of each topic
-col_means(posterior(TM)$topics)
+#col_means(posterior(TM)$topics)
 
 #Most likely topic per document
 t <- topics(TM, 1)  
-as.matrix(t)[1:4] # show the first 4
+#as.matrix(t)[1:4] # show the first 4
 
 #Most likely terms per topic
 Terms <- terms(TM, 5)
-Terms[,1:5]
+#Terms[,1:5]
 
 #Graphically show most likely terms
 text_topics <- tidy(TM, matrix = "beta")
-text_topics
+#text_topics
 
 text_top_terms <- text_topics %>%
   group_by(topic) %>%
   top_n(10, beta) %>%
   ungroup() %>%
   arrange(topic, -beta)
+
+
+```
+
+
+```{r}
 
 perplot <- 6
 for (i in 1:ceiling(k/perplot))
@@ -630,4 +703,5 @@ for (i in 1:ceiling(k/perplot))
     scale_x_reordered()
   show(p)
 }
+
 ```
