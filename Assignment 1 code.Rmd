@@ -1,16 +1,22 @@
 ---
-title: "Assignment 1 ski data"
-author: "Larissa, Ralph, Danique en Jelle"
+title: "Assignment 1 Text Analytics"
+author: 
+  - "Larissa van Boxem"
+  - "Ralph Schuurman"
+  - "Danique Osinga"
+  - "Jelle WallenBurg"
 date: "3/22/2021"
 output: pdf_document
 ---
 
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 
 # Set options
 options(stringsAsFactors=F)
 Sys.setlocale('LC_ALL','C')
+
 
 # Loading libraries
 library(stringi)
@@ -34,7 +40,7 @@ library(quanteda)
 library(smacof)
 library(factoextra)
 library(readr)
-
+library(ggplot2)
 # Loading data files
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
@@ -43,7 +49,8 @@ text.df <- read.csv("OnTheSnow_SkiAreaReviews.csv", comment.char="#")
 reviews <- data.frame(ID=seq(1:nrow(text.df)),
                       text=text.df$Review.Text, 
                       stars=text.df$Review.Star.Rating..out.of.5.) 
-
+#Create backup for stage 3 (including punctuation): 
+reviews_backup <- reviews 
 ```
 
 ## Stage one
@@ -52,9 +59,11 @@ Cleaning of the data, removing punctuation and if needed, stemming. Data must be
 - Version 1: The dataset without stemming and including punctuation (needed for stage three)
 - Version 2: The dataset as a complete fully cleaned word vector representation.
 
-```{r, warning = FALSE, message = FALSE}
-#Create backup for stage 3 (including punctuation): 
-reviews_backup <- reviews 
+
+
+```{r, warning = FALSE, message = FALSE,, eval = FALSE}
+
+# Deze kan je overslaan als je de chunk hieronder de saved files inlaad
 
 #First stage of cleaning
 reviews$text <- as.character(reviews$text)  %>% 
@@ -105,7 +114,7 @@ toremove <- full_join(frequent,infrequent)
 reviews_vector_cleaned <- reviews_vector %>% 
                             anti_join(toremove)
 
-save(reviews_vector_cleaned, file="cleanedwordvector.Rdata") # (2) fully cleaned word vector representation
+#save(reviews_vector_cleaned, file="cleanedwordvector.Rdata") # (2) fully cleaned word vector representation
 
 
 # Creating the full review from the cleaned and stemmed words
@@ -120,17 +129,18 @@ for (j in 1:nrow(reviews)) {
 # Remove empty reviews
 reviews <- reviews[!(is.na(reviews$text) | reviews$text==""), ]
 
-save(reviews, file="partially_cleaned_reviews.Rdata") # full sentences
+#save(reviews, file="partially_cleaned_reviews.Rdata") # full sentences
 ```
 
 ##Stage 2: MDS
 
-```{r}
+```{r,, cache = TRUE}
 load(file= 'partially_cleaned_reviews.Rdata')
+load(file = "cleanedwordvector.Rdata")
 
 # Creating distance matrix
 reviews_corp <- corpus(reviews, docid_field = "ID", text_field = "text")
-co_occurrence_matrix <- fcm(x = reviews_corp, context = "document", count = "frequency", tri=FALSE) # get feature co-occurence matrix: number of co-occurences of words
+co_occurrence_matrix <- fcm(x = reviews_corp, context = "window", count = "frequency", tri=FALSE, window = 5) # get feature co-occurence matrix: number of co-occurences of words
 
 # Moeten we "context = document gebruiken of context = window?" --> JELLE: document omdat we alle woordenaantallen willen pakken in de hele review (https://stackoverflow.com/questions/55509338/is-there-an-r-function-for-finding-keywords-within-a-certain-word-distance)
 # Moeten we count = frequency of count = boolean gebruiken? -> JELLE: frequency geeft aan hoe vaak woorden in eenzelfde review bevinden, boolean geeft alleen ja/nee, frequency lijkt mij daarom relevanter
@@ -151,18 +161,26 @@ co_occurrence_matrix <- co_occurrence_matrix[sortednames[1:nwords],sortednames[1
 distances <- sim2diss(co_occurrence_matrix, method = "cooccurrence") # Transform similarities to distances.
 ```
 
-```{r}
+```{r, cache = TRUE}
 
 MDS_map <- smacofSym(distances) # run the routine that finds the best matching coordinates in a 2D mp given the distances
+
+```
+
+```{r}
+library(ggplot2)
 ggplot(as.data.frame(MDS_map$conf), aes(D1, D2, label = rownames(MDS_map$conf))) +
      geom_text(check_overlap = TRUE) + theme_minimal(base_size = 15) + xlab('') + ylab('') +
      scale_y_continuous(breaks = NULL) + scale_x_continuous(breaks = NULL)
 # the conf element in the MDS output contains the coordinatis with as names D1 and D2.
+
 ```
 
 ##PCA
 
 ```{r}
+
+
 review_tdm <- reviews %>% 
                   unnest_tokens(word,text) %>% 
                       count(word,ID,sort=TRUE) %>%
@@ -176,16 +194,31 @@ sortedcount <- counts %>%
 nwords<-200
 sortednames <- names(sortedcount[1:nwords])
 
+
+```
+
+```{r, eval = FALSE}
+#Deze chunk kan je overslaan als je de volgende chunk gebruikt om de PCA results in te laden
 pca_results <- prcomp(t(review_tdm[,1:10000]), scale = FALSE, rank. = 50) # why do we set scale to FALSE? -> All data is measured on the same scale 
 pca_results_backup <- pca_results  # create a backup of results for later use
+
+#Save pca results
+#saveRDS(pca_results_loaded,'pca_results_loaded.rds')
+
+
 ```
 
 ```{r}
-fviz_screeplot(pca_results,ncp=30)
+#load(file = "pca_results.Rdata")
+pca_results <- readRDS(file = "pca_results.rds")
+
+
+#pca_results_backup <- pca_results
+#fviz_screeplot(pca_results,ncp=30)
 ```
 
-```{r}
-ncomp<-5
+```{r, cache= TRUE}
+ncomp<-2
 # Hoe kies je ncomp?
 
 j<-1
@@ -216,14 +249,38 @@ fviz_pca_var(pca_results, axes=axeslist
 ```
 
 ```{r}
+# take a subset of the most frequent words
 
-rawLoadings     <- pca_results$rotation[sortednames,1:ncomp] %*% diag(pca_results$sdev, ncomp, ncomp)
+load(file= 'partially_cleaned_reviews.Rdata')
+
+review_tdm <- reviews %>% 
+                  unnest_tokens(word,text) %>% 
+                      count(word,ID,sort=TRUE) %>%
+                        ungroup()%>%
+                          cast_tdm(word,ID,n)
+
+# take a subset of the most frequent words
+counts <- rowSums(as.matrix(review_tdm)) 
+sortedcount <- counts %>% 
+                  sort(decreasing=TRUE)
+nwords<-200
+sortednames <- names(sortedcount[1:nwords])
+
+
+ncomp <- 2
+#pca_results_test <- readRDS(file = "/Users/ralph/TA-Assignment1/pca_results_loaded.rds")
+pca_results_test <- readRDS(file = "pca_results_loaded.rds")
+rawLoadings <- pca_results_test$rotation[sortednames,1:ncomp] %*% diag(pca_results_test$sdev, ncomp, ncomp)
 rotated <- varimax(rawLoadings)
-pca_results$rotation <- rotated$loadings
-pca_results$x <- scale(pca_results$x[,1:ncomp]) %*% rotated$rotmat
+pca_results_test$rotation <- rotated$loadings
+pca_results_test$x <- scale(pca_results_test$x[,1:ncomp]) %*% rotated$rotmat
 
 
 print("PCA finished")
+
+print("PCA finished")
+
+pca_results <- pca_results_test
 
 ```
 
@@ -241,10 +298,10 @@ topwords <-cbind( topwords , (names(toplist)))
 topwords
 ```
 
-```{r}
-pca_results_small <- pca_results
-pca_results_small$x <- pca_results_small$x[1:200,] # Keep only 200 reviews to plot
-pca_results <- pca_results_small
+```{r, cache = TRUE}
+#pca_results_small <- pca_results
+#pca_results_small$x <- pca_results_small$x[1:200,] # Keep only 200 reviews to plot
+#pca_results <- pca_results_small
 ```
 
 ```{r warning = FALSE}
@@ -260,7 +317,7 @@ fviz_pca_var(pca_results, axes=axeslist
 
 ##Sentiment analysis
 
-```{r}
+```{r, cache = TRUE}
 reviews_sentiment <- reviews_backup
 reviews_sentiment$text <- as.character(reviews_sentiment$text)  %>%
                  tolower() %>%
@@ -294,6 +351,9 @@ all_words <- reviews_sentiment[,] %>%
 sentiment_scores <- polarity(all_words$word)$all        # get sentiment with polarity function
 all_words$sentiment <- sentiment_scores[,"polarity"]
 
+```
+```{r}
+
 # Create plot
 all_words %>%
 #  filter(n > 1500) %>%
@@ -307,17 +367,24 @@ all_words %>%
   labs(y = "Contribution to \"total\" sentiment", x = "Word (min freq = 5% of observations)")
 ```
 
-```{r}
+```{r, eval = FALSE}
 
 #Deze functie duurt heel lang. Dus je kan beter in de chunk onder deze de data loaden.
 
 pol <- polarity(reviews_sentiment[, "text"])$all
 # Set negators and amplifiers on empty to see how it influences polarity score
 pol2 <- polarity(reviews_sentiment[,'text'], negators = vector(), amplifiers = vector(), )$all
-# Standard uses the dictionary of qdap, here it is empty. Maybe use a dictionary of another source to compare.
+# Set negators on empty, set amplifier normal
+pol3 <- polarity(reviews_sentiment[,'text'], negators = vector(), amplifiers = qdapDictionaries::amplification.words, )$all
+# Set negators normal, amplification empty
+pol4 <- polarity(reviews_sentiment[,'text'], negators = qdapDictionaries::negation.words, amplifiers = vector(), )$all
+
+
 
 reviews_sentiment$polarity <- pol[, "polarity"]
 reviews_sentiment$polarity2 <- pol2[,"polarity"]
+reviews_sentiment$polarity3 <- pol3[,"polarity"]
+reviews_sentiment$polarity4 <- pol4[,"polarity"]
 #remove empty reviews
 reviews_sentiment<-reviews_sentiment[!(reviews_sentiment$polarity=="NaN"),]
 
@@ -328,7 +395,7 @@ save(reviews_sentiment, file="reviews_sentiment_with_polarity.Rdata")
 
 ```
 
-```{r}
+```{r, cache = TRUE}
 #load polarity data
 load(file= 'reviews_sentiment_with_polarity.Rdata')
 
@@ -341,6 +408,12 @@ neg_reviews      <- reviews_sentiment %>% filter(stars < 3) #neutral reviews not
 #get mean values of bing and polarity 
 mean(pos_reviews$polarity, na.rm = TRUE)
 mean(neg_reviews$polarity, na.rm = TRUE)
+mean(pos_reviews$polarity2, na.rm = TRUE)
+mean(neg_reviews$polarity2, na.rm = TRUE)
+mean(pos_reviews$polarity3, na.rm = TRUE)
+mean(neg_reviews$polarity3, na.rm = TRUE)
+mean(pos_reviews$polarity4, na.rm = TRUE)
+mean(neg_reviews$polarity4, na.rm = TRUE)
 
 ```
 
@@ -349,28 +422,71 @@ mean(neg_reviews$polarity, na.rm = TRUE)
 ggplot( ,aes(polarity)) +
     geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
-    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") +
+  ggtitle("Polarity histogram with negators and with amplifiers")
 
 ggplot( ,aes(polarity)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
-    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") +
+  ggtitle("Polarity histogram with negators and with amplifiers")
 
 ```
 
 ```{r}
 #Polarity plots with negators and amplifiers on 0 
 ggplot( ,aes(polarity2)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
+  ggtitle("Polarity histogram with no negators and no amplifiers") + labs(x = "polarity")
+
+ggplot( ,aes(polarity2)) +
     geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
     geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
-    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
+  ggtitle("Polarity histogram with no negators and no amplifiers") + labs(x = "polarity")
 ```
 
+```{r}
+#Polarity plots with negators and amplifiers on 0 
+ggplot( ,aes(polarity3)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
+  ggtitle("Polarity histogram with no negators but with amplifiers")+ labs(x = "polarity")
+
+ggplot( ,aes(polarity3)) +
+    geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
+  ggtitle("Polarity histogram with no negators but with amplifiers")+ labs(x = "polarity")
+```
+
+```{r}
+#Polarity plots with negators and amplifiers on 0 
+ggplot( ,aes(polarity4)) +
+    geom_histogram(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_histogram(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill") + 
+  ggtitle("Polarity histogram with negators but with no amplifiers")+ labs(x = "polarity")
+
+ggplot( ,aes(polarity4)) +
+    geom_density(aes(fill = "Happy"),   data = pos_reviews, alpha = 0.5) +
+    geom_density(aes(fill = "Unhappy"), data = neg_reviews, alpha = 0.5) +
+    scale_colour_manual("Polarity", values = c("green", "red"), aesthetics = "fill")+ 
+  ggtitle("Polarity histogram with negators but with no amplifiers")+ labs(x = "polarity")
+```
+
+
+
 ##LDA analysis
-```{r, LDA}
+```{r, LDA, cache = TRUE}
 library(topicmodels)
 
-reviews_backup$text <- as.character(reviews_backup$text)  %>%
+
+reviews_lda <- reviews_backup
+reviews_lda$text <- as.character(reviews_lda$text)  %>%
   tolower() %>%
   {gsub("\\n", " ", .)} %>%                        # Remove \n (newline)     
   {gsub("[?!]+",".",.)} %>%                        # Remove ? and ! (replace by single .)
@@ -387,10 +503,17 @@ reviews_backup$text <- as.character(reviews_backup$text)  %>%
   {gsub(" +"," ", .)} %>%                          # Remove excess spaces
   {gsub("\\. \\.","\\. ", .)}                      # Remove space between periods
 
-index <- sample(1:nrow(reviews_backup), 2000)
+index <- sample(1:nrow(reviews_lda), 2000)
 reviews_lda_subset <- reviews_backup[index,]
+<<<<<<< HEAD
 reviews_lda_subset$text <- enc2utf8(reviews_lda_subset$text)
 save(reviews_lda_subset, file="reviews_lda_subset.Rdata")
+=======
+#save(reviews_lda_subset, file="reviews_lda_subset.Rdata")
+
+
+load(file = 'reviews_lda_subset.Rdata')
+>>>>>>> 088ef98151a1716f80f180b04dbc83cef43e7784
 
 #create dtm 
 corpus <- Corpus(VectorSource(unlist(reviews_lda_subset[, "text"])))
@@ -416,15 +539,17 @@ train <- sample(1:n, round(n * 0.80))
 valid <- (1:n)[-train]
 ```
 
-```{r}
+```{r, eval = FALSE}
 #Estimate LDA for different values of K and collect perplexity values 
 #Use perplexity to determine value of alpha
 #Loow perplexity is good 
+
+#Deze duurt lang. Run de chunk die de alpha inlaadt
+
 res <- NULL
 TMlist <- list()  # list to collect results
 
-for (l in seq(10, 50, 10))
-{
+for (l in seq(10, 50, 10)) {
   print(l)
   
   TM <- LDA(dtm[train, ], method="Gibbs", k = l) #, control = list(alpha = 0.5))
@@ -435,16 +560,24 @@ for (l in seq(10, 50, 10))
   res <- rbind(res, data.frame(k=l, perplexity = p, perplexity_validation = p_valid))
   TMlist <- append(TMlist, TM)
 }
+
+save(res, file = 'res.Rdata')
+
 print(res)
 ```
 
 Lowest perplexity at K = 30
-
 ```{r}
 #Plot perplexity 
+load(file = 'res.Rdata')
+
 ggplot(res, aes(k)) +                    
   geom_line(aes(y=perplexity, colour="Train")) +
   geom_line(aes(y=perplexity_validation, colour="Validation")) + labs(colour="Sample")
+```
+
+```{r, eval= FALSE}
+
 
 # Print results with best perplexity
 res[which.min(res$perplexity_validation),]
@@ -486,20 +619,44 @@ for (a in seq(0.1, 0.4, .1))
 }
 print(resAlpha)
 
+
+
+# Show best alpha
+resAlpha[which.min(resAlpha$perplexity_validation),]
+#alpha = 0.3
+
+#save(resAlpha, file = 'resAlpha.Rdata')
+
+```
+
+```{r}
+
+#Vanaf hier LDA inladen
+library(topicmodels)
+load(file = 'resAlpha.Rdata')
+```
+
+```{r}
+
 #plot perplexity vs alpha
 ggplot(resAlpha, aes(alpha)) +                    
   geom_line(aes(y=perplexity, colour="Train")) +   
   geom_line(aes(y=perplexity_validation, colour="Validation"))  +
   labs(colour="Sample")
 
-# Show best alpha
-resAlpha[which.min(resAlpha$perplexity_validation),]
-#alpha = 0.4
 
+
+```
+
+```{r,cache = TRUE}
+k <- 30
+SEED <- 2020
 #so K = 30, alpha = 0.3
-alpha = 0.4
+alpha = resAlpha[which.min(resAlpha$perplexity_validation),]$alpha
+
 TM <- LDA(dtm[train, ], k = k, method="Gibbs", control = list(seed = SEED, alpha=alpha))
 ```
+
 
 ```{r, LDA visualization}
 #visualize assignment to topics
@@ -509,28 +666,34 @@ hist(maxProb, main="Assignment to topics", xlab="Maximum topic probability")
 
 #Print term probabilities per topic
 p <- posterior(TM)$terms
-p[,1:8]
+#p[,1:8]
 
 #Show the "size" of each topic
-col_means(posterior(TM)$topics)
+#col_means(posterior(TM)$topics)
 
 #Most likely topic per document
 t <- topics(TM, 1)  
-as.matrix(t)[1:4] # show the first 4
+#as.matrix(t)[1:4] # show the first 4
 
 #Most likely terms per topic
 Terms <- terms(TM, 5)
-Terms[,1:5]
+#Terms[,1:5]
 
 #Graphically show most likely terms
 text_topics <- tidy(TM, matrix = "beta")
-text_topics
+#text_topics
 
 text_top_terms <- text_topics %>%
   group_by(topic) %>%
   top_n(10, beta) %>%
   ungroup() %>%
   arrange(topic, -beta)
+
+
+```
+
+
+```{r}
 
 perplot <- 6
 for (i in 1:ceiling(k/perplot))
@@ -545,4 +708,5 @@ for (i in 1:ceiling(k/perplot))
     scale_x_reordered()
   show(p)
 }
+
 ```
