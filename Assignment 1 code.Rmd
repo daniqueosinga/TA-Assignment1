@@ -323,7 +323,7 @@ reviews_sentiment<-reviews_sentiment[!(reviews_sentiment$polarity=="NaN"),]
 
 
 #Save with polarity
-#save(reviews_sentiment, file="reviews_sentiment_with_polarity.Rdata")
+save(reviews_sentiment, file="reviews_sentiment_with_polarity.Rdata")
 
 
 ```
@@ -389,6 +389,7 @@ reviews_backup$text <- as.character(reviews_backup$text)  %>%
 
 index <- sample(1:nrow(reviews_backup), 2000)
 reviews_lda_subset <- reviews_backup[index,]
+reviews_lda_subset$text <- enc2utf8(reviews_lda_subset$text)
 save(reviews_lda_subset, file="reviews_lda_subset.Rdata")
 
 #create dtm 
